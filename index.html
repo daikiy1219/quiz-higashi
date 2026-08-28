@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Quiz_Higashi - 高校数学 対戦クイズ</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- External Libraries (QR Code, PeerJS, Confetti) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+
+    <!-- Header / Navigation Bar -->
+    <header class="app-header">
+        <div class="app-title">
+            <span>⚡ Quiz_Higashi</span>
+            <span class="badge-tag">高校数学版</span>
+        </div>
+        <div class="header-controls">
+            <button class="icon-btn" onclick="window.soundEngine.toggleMute(); this.innerText = window.soundEngine.isMuted ? '🔇 ミュート中' : '🔊 BGM / SE';">🔊 BGM / SE</button>
+        </div>
+    </header>
+
+    <!-- Main App Container -->
+    <main class="app-container">
+
+        <!-- SCREEN 1: Role Selection / Home -->
+        <section id="screen-home" class="screen active">
+            <div style="text-align: center; margin-top: 1rem;">
+                <h1 style="font-size: 2.8rem; font-weight: 900; margin-bottom: 0.5rem;">高校数学・リアルタイム対戦</h1>
+                <p style="color: #BBB; font-size: 1.1rem;">完全無料・契約不要！出題範囲を選ぶだけで自動で4択問題を作成。スマホからQRコードで参加しよう！</p>
+            </div>
+
+            <div class="mode-selection">
+                <div class="card" onclick="window.app.selectRole('host')">
+                    <div>
+                        <div class="card-icon">👑</div>
+                        <h2>先生（ホスト）として主催</h2>
+                        <p>大画面にQRコードと問題を映し、出題範囲を設定してクラス全体の対戦を進行します。</p>
+                    </div>
+                    <button class="btn-primary">部屋を作成する</button>
+                </div>
+
+                <div class="card" onclick="window.app.selectRole('student')">
+                    <div>
+                        <div class="card-icon">📱</div>
+                        <h2>生徒として参戦</h2>
+                        <p>スマホやタブレットでQRコードを読み込むか、ルームコードを入力して回答します。</p>
+                    </div>
+                    <button class="btn-primary" style="background: linear-gradient(135deg, #00F0FF, #1368CE);">ゲームに参加する</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 2: Host Room Lobby -->
+        <section id="screen-host-lobby" class="screen">
+            <div class="lobby-container">
+                <!-- Left Box: Room Code & QR -->
+                <div class="qr-box">
+                    <h2>スマホで読み込んで参加！</h2>
+                    <div id="qrcode"></div>
+                    
+                    <div id="file-protocol-notice" style="display: none; background: rgba(255, 51, 102, 0.2); border: 1px solid var(--color-pink); padding: 0.8rem; border-radius: 12px; margin: 0.8rem 0; font-size: 0.85rem; text-align: left; line-height: 1.4;">
+                        <strong>📱 スマホ実機で参加する場合：</strong><br>
+                        フォルダ内にある <b>「アプリを起動.bat」</b> をダブルクリックして起動してください。（スマホと同じWi-Fi接続でQRが使えます）<br><br>
+                        <strong>💻 PC1台でテストする場合：</strong><br>
+                        ブラウザの別タブでこのページを開き、下の6桁コードを入力して「生徒」で入室できます。
+                    </div>
+
+                    <p style="color: #AAA;">ルームコード</p>
+                    <div id="display-room-code" class="room-code-display">------</div>
+                    <p style="font-size: 0.9rem; color: #888;">同PC内テスト：別タブでこのページを開き「生徒」として参加可能</p>
+                </div>
+
+                <!-- Right Box: Settings & Player List -->
+                <div class="players-box">
+                    <div class="form-group">
+                        <label for="select-category">出題範囲の選択</label>
+                        <select id="select-category" class="select-input" onchange="document.getElementById('custom-category-group').style.display = (this.value === 'custom') ? 'block' : 'none';">
+                            <option value="all">🏫 全分野ミックス (高校教科全般からランダム出題)</option>
+                            
+                            <optgroup label="■ 国語（現代文・古典）">
+                                <option value="kokugo_gen_kanji">国語：現代文 (評論文や小説によく出る重要漢字・語彙の書き取り)</option>
+                                <option value="kokugo_gen_idiom">国語：現代文 (教養としてのことわざ・慣用句・四字熟語の意味)</option>
+                                <option value="kokugo_kobun">国語：古文 (古文単語の意味・基本文法・過去の助動詞接続)</option>
+                                <option value="kokugo_kanbun">国語：漢文 (返り点のルール・訓読法・重要句法の書き下し)</option>
+                            </optgroup>
+                            
+                            <optgroup label="■ 数学 (動的計算テスト)">
+                                <option value="factorization">数学I：数と式 (多項式の展開・たすき掛け因数分解)</option>
+                                <option value="quad_vertex">数学I：2次関数 (平方完成とグラフの頂点座標の算出)</option>
+                                <option value="quad_maxmin">数学I：2次関数 (指定された定義域内における最大値・最小値)</option>
+                                <option value="quad_det">数学I：2次関数 (頂点や通る点からの関数式の決定)</option>
+                                <option value="trig_ratio">数学I：図形と計量 (sin・cos・tanの基本値と相互関係)</option>
+                                <option value="trig_laws">数学I：図形と計量 (正弦定理・余弦定理を用いた辺の計算)</option>
+                                <option value="prob_permcomb">数学A：場合の数 (順列 nPr と組合せ nCr の公式計算)</option>
+                                <option value="prob_cond">数学A：確率の基礎 (基本的な確率と条件付き確率の計算)</option>
+                                <option value="trig_func">数学II：三角関数 (加法定理を用いた三角関数の合成公式)</option>
+                                <option value="log_func">数学II：指数・対数関数 (対数計算と底の変換公式)</option>
+                                <option value="diff_tangent">数学II：微分法 (極限値・導関数と曲線上の接線方程式)</option>
+                                <option value="int_area">数学II：積分法 (定積分の計算と放物線で囲まれた面積)</option>
+                                <option value="seq_sum">数学B：数列 (等差数列・等比数列の一般項と和の公式)</option>
+                                <option value="vec_dot">数学C：ベクトル (平面ベクトルの成分表示と内積の計算)</option>
+                                <option value="math_all">数学：全分野 (上記数I〜数Cの計算問題からランダム)</option>
+                            </optgroup>
+
+                            <optgroup label="■ 英語（単語・文法）">
+                                <option value="english_vocab_base">英語：基礎英単語 (日常会話・教科書レベルの基本名詞・動詞)</option>
+                                <option value="english_vocab_adv">英語：応用英単語 (共通テスト・大学入試頻出の最重要語彙)</option>
+                                <option value="english_grammar_base">英語：英文法(基礎) (現在完了形・助動詞・受動態の使い分け)</option>
+                                <option value="english_grammar_adv">英語：英文法(応用) (関係代名詞・関係副詞・仮定法の表現)</option>
+                            </optgroup>
+                            
+                            <optgroup label="■ 地理歴史（日本史・世界史・地理）">
+                                <option value="society_jp_history_early">日本史：原始・古代〜中世 (墾田永年私財法・大化の改新・鎌倉政権)</option>
+                                <option value="society_jp_history_modern">日本史：近世〜近代 (本能寺の変・関ヶ原の戦い・明治維新大政奉還)</option>
+                                <option value="society_jp_history_recent">日本史：現代 (治安維持法・ポツダム宣言・戦後の改革)</option>
+                                <option value="society_world_history_early">世界史：古代〜中世 (ハンムラビ法典・アレクサンドロス大王・秦の統一)</option>
+                                <option value="society_world_history_modern">世界史：近世〜近代 (コロンブス来航・フランス革命・産業革命)</option>
+                                <option value="society_world_history_recent">世界史：現代 (第一次世界大戦の契機・世界恐慌・東西冷戦)</option>
+                                <option value="society_geography_nature">地理：自然環境と気候 (ケッペンの気候区分・プレートと造山帯)</option>
+                                <option value="society_geography_industry">地理：世界の産業・資源 (時差の計算・企業的穀物農業・鉄鉱石)</option>
+                            </optgroup>
+                            
+                            <optgroup label="■ 理科（物理・化学・生物）">
+                                <option value="science_physics_mechanics">物理：物体の運動 (速度・等加速度直線運動・運動方程式 F=ma)</option>
+                                <option value="science_physics_wave_heat">物理：熱と波 (熱量 Q=mcΔT・光の屈折・ドップラー効果)</option>
+                                <option value="science_physics_electromagnet">物理：電気と磁気 (オームの法則・右ねじの法則・電磁誘導)</option>
+                                <option value="science_chemistry_atomic">化学：原子の構造 (電子殻K殻L殻・周期表の同族元素・共有結合)</option>
+                                <option value="science_chemistry_reaction">化学：物質量と化学変化 (物質量 mol・気体の体積22.4L・アボガドロ数)</option>
+                                <option value="science_chemistry_acid_base">化学：酸・塩基と酸化還元 (pHの定義・中和反応・電子の授受と酸化数)</option>
+                                <option value="science_biology_cell_dna">生物：細胞とDNA (原核細胞と真核細胞の比較・転写と翻訳)</option>
+                                <option value="science_biology_body_env">生物：体内環境の維持 (自律神経・獲得免疫と自然免疫・恒常性)</option>
+                                <option value="science_biology_ecosystem">生物：生態系と循環 (生産者・消費者・分解者・照葉樹林バイオーム)</option>
+                            </optgroup>
+                            
+                            <optgroup label="■ 情報・家庭科">
+                                <option value="info_digital">情報：情報の表し方 (2進数・16進数の計算、ビットとバイト、画像音声の表現)</option>
+                                <option value="info_network_security">情報：ネットワーク・セキュリティ (IPアドレス・暗号化方式・防犯対策)</option>
+                                <option value="info_algorithm">情報：アルゴリズム (フローチャートの記号・基本3構造・ループ処理)</option>
+                                <option value="home_diet">家庭科：食生活と栄養 (五大栄養素の働き・アレルギー特定原材料8品目)</option>
+                                <option value="home_life">家庭科：消費生活・家族 (クーリングオフ制度・核家族・社会保障)</option>
+                            </optgroup>
+                            
+                            <option value="custom">✏️ AIキーワード指定（具体的な単語を入力して自動選定）</option>
+                        </select>
+                    </div>
+
+                    <div id="custom-category-group" class="form-group" style="display: none;">
+                        <label for="input-custom-category">🤖 AI自動解析キーワード（ピンポイントな単語を入力）</label>
+                        <input type="text" id="input-custom-category" class="text-input" placeholder="例: 二次関数の決定, 頂点の座標, 三角関数の合成, 接線の方程式, ベクトルの内積">
+                        <small style="color: #00F0FF; display: block; margin-top: 0.4rem;">💡 「二次関数の決定」「余弦定理」「接線」「対数」など具体的な単語をAIが自動判別して即座に問題を生成します！</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="input-question-count">出題数（任意の問題数を入力可能）</label>
+                        <input type="number" id="input-question-count" class="text-input" value="10" min="1" max="100" style="font-size: 1.2rem; font-weight: 700;">
+                    </div>
+
+                    <h3 id="host-player-count" style="margin-top: 1rem;">参加生徒 (0名)</h3>
+                    <div id="lobby-player-list" class="player-list">
+                        <p style="color: #666; font-style: italic;">生徒の参加を待っています...</p>
+                    </div>
+
+                    <button class="btn-primary" style="margin-top: auto; font-size: 1.3rem;" onclick="window.app.startHostGame()">対戦スタート 🚀</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 3: Host Question Screen -->
+        <section id="screen-host-game" class="screen">
+            <div class="question-header">
+                <div>
+                    <span id="host-q-num" style="font-size: 1.4rem; font-weight: 900; color: var(--color-accent);">1 / 10</span>
+                </div>
+                <div id="host-timer" class="timer-circle">20</div>
+                <div>
+                    <span id="host-answer-count" style="font-size: 1.2rem; font-weight: 700;">回答数: 0 / 0</span>
+                </div>
+            </div>
+
+            <div class="question-box">
+                <span id="host-q-category" class="question-category">高校数学</span>
+                <div id="host-q-text">問題文がここに表示されます</div>
+            </div>
+
+            <div class="options-grid">
+                <button id="host-opt-0" class="option-btn opt-red"><span class="option-shape">▲</span> 選択肢 1</button>
+                <button id="host-opt-1" class="option-btn opt-blue"><span class="option-shape">◆</span> 選択肢 2</button>
+                <button id="host-opt-2" class="option-btn opt-yellow"><span class="option-shape">●</span> 選択肢 3</button>
+                <button id="host-opt-3" class="option-btn opt-green"><span class="option-shape">■</span> 選択肢 4</button>
+            </div>
+
+            <!-- Teacher Game Controls Toolbar -->
+            <div class="teacher-toolbar">
+                <button class="teacher-btn" onclick="window.app.togglePauseTimer()" id="btn-pause-timer">⏸️ 一時停止（解説タイム）</button>
+                <button class="teacher-btn" onclick="window.app.revealQuestionResult()">⏩ 今すぐ回答締め切り</button>
+                <select id="select-timer-limit" class="teacher-btn" onchange="window.app.timeLimit = parseInt(this.value);" style="background: rgba(0,0,0,0.5);">
+                    <option value="10">⏱️ 10秒（超速）</option>
+                    <option value="20" selected>⏱️ 20秒（標準）</option>
+                    <option value="30">⏱️ 30秒（じっくり）</option>
+                    <option value="60">⏱️ 60秒（難問）</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- SCREEN 4: Host Leaderboard & Explanation -->
+        <section id="screen-host-leaderboard" class="screen">
+            <div class="leaderboard-box">
+                <h2 style="text-align: center; font-size: 2.2rem; font-weight: 900; margin-bottom: 1rem; color: var(--color-accent);">📊 スコアランキング</h2>
+                <div id="leaderboard-list">
+                    <!-- Leaderboard Rows rendered dynamically -->
+                </div>
+
+                <!-- Teacher Step-by-Step Math Explanation Box -->
+                <div id="host-explanation-container" class="explanation-box" style="display: none;">
+                    <!-- Math explanation rendered dynamically -->
+                </div>
+
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                    <button class="teacher-btn" style="background: rgba(0, 240, 255, 0.2); border-color: var(--color-accent);" onclick="window.app.toggleExplanation()">💡 問題の解き方（解説）を表示/非表示</button>
+                    <button class="btn-primary" onclick="window.app.nextQuestion()">次の問題へ ➔</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 5: Host Podium (Final Winners) -->
+        <section id="screen-host-podium" class="screen">
+            <div style="text-align: center;">
+                <h1 style="font-size: 3rem; font-weight: 900; background: linear-gradient(135deg, #FFD700, #00F0FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🏆 最終順位発表！ 🏆</h1>
+                
+                <div class="podium-container">
+                    <!-- 2nd Place -->
+                    <div class="podium-pillar podium-2">
+                        <span class="podium-rank">2</span>
+                        <div id="podium-name-2" class="podium-name">Player 2</div>
+                    </div>
+                    <!-- 1st Place -->
+                    <div class="podium-pillar podium-1">
+                        <span class="podium-rank">1</span>
+                        <div id="podium-name-1" class="podium-name">Player 1</div>
+                    </div>
+                    <!-- 3rd Place -->
+                    <div class="podium-pillar podium-3">
+                        <span class="podium-rank">3</span>
+                        <div id="podium-name-3" class="podium-name">Player 3</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 3rem; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+                    <button class="btn-primary" style="background: linear-gradient(135deg, #00F0FF, #1368CE);" onclick="window.app.showFullRanking()">📊 全体ランキング一覧を見る</button>
+                    <button class="btn-primary" onclick="location.reload()">🔄 もう一度プレイする</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 5.5: Host Overall Full Ranking (全体ランキング画面) -->
+        <section id="screen-host-full-ranking" class="screen">
+            <div class="leaderboard-box" style="max-width: 950px;">
+                <h1 style="text-align: center; font-size: 2.5rem; font-weight: 900; margin-bottom: 1.5rem; color: var(--color-accent);">📊 最終結果・全体順位表</h1>
+                
+                <div style="overflow-x: auto;">
+                    <table class="full-ranking-table">
+                        <thead>
+                            <tr>
+                                <th>順位</th>
+                                <th>生徒（アバター / 名）</th>
+                                <th>合計スコア</th>
+                                <th>正解数 / 出題数</th>
+                                <th>最高コンボ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="full-ranking-tbody">
+                            <!-- Rendered dynamically in app.js -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <button class="btn-primary" style="background: linear-gradient(135deg, #26890C, #144B04);" onclick="window.app.exportCSV()">📥 成績データ(CSV)をダウンロード</button>
+                    <button class="btn-primary" style="background: var(--bg-card); border: 1px solid var(--border-glow);" onclick="window.app.showScreen('hostPodium')">⬅️ 表彰台に戻る</button>
+                    <button class="btn-primary" onclick="location.reload()">🔄 新しいゲームを開始</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 6: Student Join Screen -->
+        <section id="screen-student-join" class="screen">
+            <div class="student-join-box">
+                <h2 style="margin-bottom: 1rem;">📱 クイズに参加</h2>
+                
+                <div class="form-group">
+                    <label for="input-room-code">ルームコード</label>
+                    <input type="text" id="input-room-code" class="text-input" placeholder="例: 123456" maxlength="6" style="text-align: center; font-size: 1.5rem; letter-spacing: 2px;">
+                </div>
+
+                <div class="form-group">
+                    <label for="input-student-name">ニックネーム</label>
+                    <input type="text" id="input-student-name" class="text-input" placeholder="名前またはニックネーム" maxlength="12">
+                </div>
+
+                <div class="form-group">
+                    <label>アバターを選択</label>
+                    <div id="avatar-picker" class="avatar-grid">
+                        <div class="avatar-option selected" onclick="window.app.selectAvatar('🦁', this)">🦁</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('🦊', this)">🦊</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('🐲', this)">🐲</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('🤖', this)">🤖</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('⚡', this)">⚡</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('💎', this)">💎</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('🚀', this)">🚀</div>
+                        <div class="avatar-option" onclick="window.app.selectAvatar('🎯', this)">🎯</div>
+                    </div>
+                </div>
+
+                <button class="btn-primary" style="width: 100%; margin-top: 1rem;" onclick="window.app.submitStudentJoin()">参戦スタート！ 🚀</button>
+            </div>
+        </section>
+
+        <!-- SCREEN 7: Student Wait Screen -->
+        <section id="screen-student-wait" class="screen">
+            <div style="text-align: center; margin-top: 5rem;">
+                <div class="timer-circle" style="margin: 0 auto 2rem auto; width: 100px; height: 100px; font-size: 3rem;">⏳</div>
+                <h2 id="student-status-text" style="font-size: 1.5rem; color: #FFF;">先生のゲーム開始を待っています...</h2>
+            </div>
+        </section>
+
+        <!-- SCREEN 8: Student Controller 4-Button Grid -->
+        <section id="screen-student-game" class="screen">
+            <div style="text-align: center; margin-bottom: 0.5rem; font-weight: 700; color: var(--color-accent);">大画面の問題を見て色・形を選んでタップ！</div>
+            <div class="student-buttons-grid">
+                <button class="student-opt-btn opt-red" onclick="window.app.submitStudentAnswer(0)">▲</button>
+                <button class="student-opt-btn opt-blue" onclick="window.app.submitStudentAnswer(1)">◆</button>
+                <button class="student-opt-btn opt-yellow" onclick="window.app.submitStudentAnswer(2)">●</button>
+                <button class="student-opt-btn opt-green" onclick="window.app.submitStudentAnswer(3)">■</button>
+            </div>
+        </section>
+
+        <!-- SCREEN 9: Student Feedback Overlay -->
+        <section id="screen-student-feedback" class="screen">
+            <div id="feedback-box" class="feedback-overlay feedback-correct">
+                <div id="feedback-title">正解！ 🎉</div>
+                <div id="feedback-desc" style="font-size: 1.4rem; font-weight: 600; margin-top: 1rem;">スコア獲得！</div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- App Scripts -->
+    <script src="sound.js"></script>
+    <script src="quizGenerator.js"></script>
+    <script src="network.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
